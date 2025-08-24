@@ -124,6 +124,22 @@
             return idStr;
         }
 
+        /**
+         * **NEW**: A flexible function to find a value in a row by checking multiple possible column names.
+         * This makes the app robust to changes in column order or naming conventions.
+         * @param {object} row - The data row object from PapaParse.
+         * @param {string[]} possibleKeys - An array of possible header names for the data.
+         * @returns {string|undefined} The found value or undefined if not found.
+         */
+        function findValue(row, possibleKeys) {
+            for (const key of possibleKeys) {
+                if (row[key] !== undefined && row[key] !== null) {
+                    return row[key];
+                }
+            }
+            return undefined;
+        }
+
         async function processFiles() {
             const masterFile = document.getElementById('masterFile').files[0];
             const detailedFile = document.getElementById('detailedScheduleFile').files[0];
@@ -151,7 +167,7 @@
                 const masterMap = new Map();
                 const masterIds = new Set();
                 masterData.forEach(row => {
-                    const bioId = cleanId(row['BIO'] || row['OWF ID']);
+                    const bioId = cleanId(findValue(row, ['BIO', 'OWF ID']));
                     if (bioId) {
                         masterMap.set(bioId, row);
                         masterIds.add(bioId);
@@ -161,14 +177,16 @@
                 const scheduleIds = new Set();
                 
                 scheduleData.forEach(scheduleRow => {
-                    const bioId = cleanId(scheduleRow['BIO'] || scheduleRow['OWF ID']);
+                    // **ADJUSTED**: Use the flexible findValue function to locate the ID, Date, and Schedule columns.
+                    const bioId = cleanId(findValue(scheduleRow, ['BIO', 'OWF ID']));
                     if (!bioId) return;
                     scheduleIds.add(bioId);
                     
                     const masterInfo = masterMap.get(bioId);
                     
                     if (masterInfo) {
-                        const shiftCode = scheduleRow['SHIFT_CODE'] || scheduleRow['Schedule'] || scheduleRow['SCHEDULE'];
+                        const shiftCode = findValue(scheduleRow, ['SHIFT_CODE', 'Schedule', 'SCHEDULE']);
+                        const transactionDay = findValue(scheduleRow, ['TRANSACTION_DAY', 'Date', 'DATE']);
 
                         const newRow = {
                             // Data from Master File (VLOOKUP result)
@@ -185,18 +203,18 @@
                             POST_CODE: masterInfo.POST_CODE,
                             JOB_TITLE_CODE: masterInfo.JOB_TITLE_CODE,
                             
-                            // **CRITICAL FIX**: DAYTYPE is now ALWAYS from the master file.
+                            // DAYTYPE is now ALWAYS from the master file.
                             DAYTYPE: masterInfo.DAYTYPE,
 
-                            // Data from Schedule File
-                            TRANSACTION_DAY: scheduleRow['TRANSACTION_DAY'] || scheduleRow['Date'] || scheduleRow['DATE'],
+                            // Data from Schedule File, found flexibly
+                            TRANSACTION_DAY: transactionDay,
                             SHIFT_CODE: shiftCode,
                             
                             // Consistent BIO ID from the schedule file
                             BIO: bioId
                         };
 
-                        // If the schedule says "RESTDAY", we still keep the DAYTYPE from the master,
+                        // If the schedule itself says "RESTDAY", we still keep the DAYTYPE from the master,
                         // but we can adjust the SHIFT_CODE if needed, or just display it as is.
                         // The current logic correctly displays "RESTDAY" in the SHIFT_CODE column.
 
